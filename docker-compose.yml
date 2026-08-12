@@ -11,10 +11,13 @@ services:
       - DATABASE_URL=sqlite:////app/backend/smartcommute.db
       # 在 .env 或部署环境填入真实密钥；缺省时自动使用 Mock 模式
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - ONEMAP_TOKEN=${ONEMAP_TOKEN:-}
+      - ONEMAP_ROUTING_ENDPOINT=${ONEMAP_ROUTING_ENDPOINT:-https://www.onemap.gov.sg/api/public/routingsvc/route}
+      - LTA_ACCOUNT_KEY=${LTA_ACCOUNT_KEY:-}
+      - LTA_DATAMALL_BASE_URL=${LTA_DATAMALL_BASE_URL:-https://datamall.lta.gov.sg}
       - GOOGLE_MAPS_API_KEY=${GOOGLE_MAPS_API_KEY:-}
-      - WEATHER_API_KEY=${WEATHER_API_KEY:-}
+      - WEATHER_PROVIDER=${WEATHER_PROVIDER:-open_meteo}
       - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:5173,http://localhost:80}
-      - SMARTCOMMUTE_ENABLE_CHECKPOINTER=1
     volumes:
       - smartcommute-data:/app/backend
     restart: unless-stopped

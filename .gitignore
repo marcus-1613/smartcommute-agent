@@ -48,6 +48,9 @@ checkpoint.sqlite
 # 个人/工作区数据（.workbuddy 为项目本地数据，非源码）
 .workbuddy/
 
-# 本地数据库运行时文件
+# 本地数据库运行时文件（含 SQLite WAL 伴生文件）
 smartcommute.db
 smartcommute.checkpoint.sqlite
+smartcommute.checkpoint.sqlite-shm
+smartcommute.checkpoint.sqlite-wal
+smartcommute.checkpoint.sqlite-journal
