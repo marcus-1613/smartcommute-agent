@@ -9,9 +9,34 @@ import asyncio
 import logging
 import os
 import sys
+import threading
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
+
+# Windows 下 uvicorn 强制使用 SelectorEventLoop（不支持子进程），
+# 而 MCP stdio client 需要启动子进程。解决方案：在专用后台线程中
+# 运行一个 ProactorEventLoop（支持子进程），所有 MCP 调用提交到它执行。
+_bg_loop: Optional[asyncio.AbstractEventLoop] = None
+_bg_lock = threading.Lock()
+
+
+def _get_proactor_loop() -> asyncio.AbstractEventLoop:
+    """惰性创建并启动后台 Proactor 事件循环（仅 Windows 需要）。"""
+    global _bg_loop
+    if _bg_loop is not None and not _bg_loop.is_closed():
+        return _bg_loop
+    with _bg_lock:
+        if _bg_loop is None or _bg_loop.is_closed():
+            if sys.platform == "win32":
+                loop = asyncio.ProactorEventLoop()
+            else:
+                loop = asyncio.new_event_loop()
+            t = threading.Thread(target=loop.run_forever, daemon=True, name="mcp-proactor")
+            t.start()
+            _bg_loop = loop
+            logger.info("已启动 MCP 专用 Proactor 事件循环（后台线程）")
+    return _bg_loop
 
 # 项目根目录：backend/app/services/mcp_client.py -> 上三级到项目根
 _MCP_DIR = os.path.abspath(
@@ -36,7 +61,23 @@ class MCPToolClient:
     async def _call_tool(
         self, server: str, tool: str, arguments: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """调用指定 server 的指定工具。"""
+        """调用指定 server 的指定工具。
+
+        Windows 下 uvicorn 使用 SelectorEventLoop（不支持子进程），
+        因此将实际 MCP 调用提交到专用 Proactor 后台循环执行。
+        """
+        if sys.platform == "win32":
+            loop = _get_proactor_loop()
+            fut = asyncio.run_coroutine_threadsafe(
+                self._call_tool_impl(server, tool, arguments), loop
+            )
+            return await asyncio.wrap_future(fut)
+        return await self._call_tool_impl(server, tool, arguments)
+
+    async def _call_tool_impl(
+        self, server: str, tool: str, arguments: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """实际的 MCP 工具调用逻辑（需运行在支持子进程的事件循环中）。"""
         script = (
             self.mobility_script if server == "mobility" else self.weather_script
         )

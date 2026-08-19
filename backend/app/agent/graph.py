@@ -63,6 +63,51 @@ class CommuteAgent:
         state["llm_source"] = "mock"
         return state
 
+    async def detect_intent(self, state: AgentState) -> AgentState:
+        """识别用户意图：通勤/交通 或 一般问题。
+
+        一般问题（知识、问候、闲聊等）直接由 DeepSeek 生成文本回答，
+        不进入路线查询流程，避免因缺失 origin/destination 而返回空白。
+
+        始终执行意图识别（不因已有通勤上下文而短路），并传入上下文，
+        让分类器区分「路线调整/补充」（commute）与「话题跳转」（general）。
+        """
+        user_input = state.get("user_input", "")
+        existing = state.get("commute_request") or {}
+
+        try:
+            cls = self.llm.classify_intent(user_input, context=existing)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("意图识别异常：%s", exc)
+            cls = {"intent": "commute", "error": str(exc)}
+
+        intent = cls.get("intent", "commute")
+        # 兜底：仅当分类器异常且已有通勤上下文时，才默认按通勤处理，
+        # 避免破坏多轮补充（如"换一条少走路的路线"）。
+        if cls.get("error") and existing.get("origin") and existing.get("destination"):
+            intent = "commute"
+
+        state["intent"] = intent
+
+        if intent != "commute":
+            # 一般问题：直接生成回答
+            try:
+                ans = self.llm.chat_free_text(user_input)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("通用问答异常：%s", exc)
+                ans = {"ok": False, "text": "", "error": str(exc)}
+            if ans.get("ok") and ans.get("text"):
+                state["final_response"] = ans["text"]
+                state["data_sources"] = {"overall": "live"}
+            else:
+                # 明确降级提示，绝不返回空白
+                state["final_response"] = (
+                    "抱歉，我暂时无法回答这个问题。"
+                    + (f"（原因：{ans.get('error')}）" if ans.get("error") else "")
+                )
+                state["data_sources"] = {"overall": "error"}
+        return state
+
     async def _llm_parse(self, user_input: str, existing: Dict[str, Any]) -> Dict[str, Any]:
         """调用 LLM 解析，返回统一结构。"""
         try:
@@ -392,18 +437,48 @@ class CommuteAgent:
             if not (llm_text and "阵雨" in llm_text and "伞" in llm_text):
                 lines.append(f"天气提示：{advice}")
 
-        # 数据来源标识
+        # 数据来源标识：区分「模拟」「实时」「部分模拟/部分失败」「不可用」
         if source_label == "模拟数据":
             lines.append("（当前为模拟数据演示模式，数据仅供参考）")
         elif source_label == "实时数据":
             lines.append("（数据来源：实时 API）")
         elif source_label.startswith("部分数据"):
-            lines.append("（部分数据来源不可用，结果可能不完整）")
+            lines.append(self._build_partial_source_hint(state))
         else:
             lines.append("（路线数据暂不可用，请稍后重试）")
 
         state["final_response"] = "\n".join(lines)
         return state
+
+    def _build_partial_source_hint(self, state: AgentState) -> str:
+        """根据各数据源实际状态，生成准确的部分数据提示。
+
+        区分「模拟数据」与「调用失败」两种降级原因，避免把
+        mock 误描述为「不可用」，也不把失败误描述为「模拟」。
+        """
+        sources = (state.get("data_sources") or {}).copy()
+        sources.pop("overall", None)
+        label = {"routes": "路线", "weather": "天气", "traffic": "交通事件"}
+
+        mock_parts = []
+        failed_parts = []
+        for key, entry in sources.items():
+            if not entry:
+                continue
+            name = label.get(key, key)
+            if entry.get("status") == "error":
+                failed_parts.append(name)
+            elif entry.get("source") == "mock":
+                mock_parts.append(name)
+
+        hints = []
+        if mock_parts:
+            hints.append("、".join(mock_parts) + "为模拟数据")
+        if failed_parts:
+            hints.append("、".join(failed_parts) + "暂不可用")
+        if not hints:
+            return "（部分数据来源不可用，结果可能不完整）"
+        return "（" + "；".join(hints) + "，结果可能不完整）"
 
     def _explain_reasons(self, scored: Dict[str, Any]) -> List[str]:
         """基于评分明细生成可解释的推荐理由。"""
@@ -438,6 +513,7 @@ class CommuteAgent:
         graph = StateGraph(AgentState)
 
         graph.add_node("parse_request", self.parse_request)
+        graph.add_node("detect_intent", self.detect_intent)
         graph.add_node("check_missing", self.check_missing)
         graph.add_node("query_data", self.query_data)
         graph.add_node("normalize_data", self.normalize_data)
@@ -445,7 +521,17 @@ class CommuteAgent:
         graph.add_node("generate_recommendation", self.generate_recommendation)
 
         graph.set_entry_point("parse_request")
-        graph.add_edge("parse_request", "check_missing")
+        graph.add_edge("parse_request", "detect_intent")
+
+        # 条件边：一般问题直接结束（已生成回答），通勤问题进入字段检查
+        graph.add_conditional_edges(
+            "detect_intent",
+            self._route_after_intent,
+            {
+                "answer": END,
+                "check": "check_missing",
+            },
+        )
 
         # 条件边：缺失字段则直接返回澄清，否则进入数据查询
         graph.add_conditional_edges(
@@ -465,6 +551,11 @@ class CommuteAgent:
         if self.checkpointer is not None:
             return graph.compile(checkpointer=self.checkpointer)
         return graph.compile()
+
+    def _route_after_intent(self, state: AgentState) -> Literal["answer", "check"]:
+        if state.get("intent") != "commute":
+            return "answer"
+        return "check"
 
     def _route_after_check(self, state: AgentState) -> Literal["clarify", "query"]:
         if state.get("needs_clarification"):
@@ -488,6 +579,7 @@ class CommuteAgent:
             "user_input": user_input,
             "messages": [],
             "commute_request": {},
+            "intent": "commute",
             "missing_fields": [],
             "needs_clarification": False,
             "clarification_question": "",

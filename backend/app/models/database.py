@@ -33,3 +33,20 @@ def init_db() -> None:
     from .entities import Base
 
     Base.metadata.create_all(bind=engine)
+    _ensure_columns()
+
+
+def _ensure_columns() -> None:
+    """轻量列迁移：为已存在的 SQLite 表补齐新增列（create_all 不会改已有表）。"""
+    if not settings.database_url.startswith("sqlite"):
+        return
+    from sqlalchemy import inspect, text
+
+    insp = inspect(engine)
+    if "messages" not in insp.get_table_names():
+        return
+    existing = {c["name"] for c in insp.get_columns("messages")}
+    if "meta" not in existing:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE messages ADD COLUMN meta JSON"))
+

@@ -96,6 +96,19 @@ async def chat(req: ChatRequest, db: Session = Depends(get_db)):
     elapsed_ms = int((time.perf_counter() - start) * 1000)
 
     reply = result.get("final_response", "")
+    # 关键兜底：澄清场景（走 clarify 分支未生成 final_response）或异常空响应，
+    # 绝不能把空字符串返回给前端（否则前端显示空白）。
+    if not reply:
+        needs_clarify = bool(result.get("needs_clarification"))
+        clarify_q = result.get("clarification_question") or ""
+        if needs_clarify and clarify_q:
+            reply = clarify_q
+        else:
+            errors = result.get("errors") or []
+            reply = (
+                "抱歉，我暂时无法处理这个请求。"
+                + (f"（{errors[0]}）" if errors else "请稍后重试或换个说法。")
+            )
     route_scores = result.get("route_scores", [])
     selected = result.get("selected_route")
     # 数据来源标识：基于 Agent 汇总的 data_sources.overall
@@ -106,8 +119,14 @@ async def chat(req: ChatRequest, db: Session = Depends(get_db)):
         # 兼容旧字段：真实数据时，优先给出路线来源名（供历史数据展示）
         source = data_sources.get("routes", {}).get("source", "live")
 
-    # 记录助手回复
-    repo.add_message(db, session_id, "assistant", reply)
+    # 记录助手回复（附带富数据元信息，供前端恢复会话时还原路线卡片与数据来源标签）
+    assistant_meta = {
+        "route_scores": route_scores,
+        "data_sources": data_sources,
+        "source": source,
+        "selected_route": selected,
+    }
+    repo.add_message(db, session_id, "assistant", reply, meta=assistant_meta)
 
     # 保存通勤计划（若生成了路线）
     if route_scores and req_data.get("origin") and req_data.get("destination"):

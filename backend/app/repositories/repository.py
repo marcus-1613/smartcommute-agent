@@ -63,13 +63,21 @@ def list_conversations(db: Session) -> List[Conversation]:
 
 
 def add_message(
-    db: Session, conversation_id: str, role: str, content: str
+    db: Session,
+    conversation_id: str,
+    role: str,
+    content: str,
+    meta: Optional[Dict[str, Any]] = None,
 ) -> Message:
     from datetime import datetime, timezone
 
     now = datetime.now(timezone.utc)
     msg = Message(
-        conversation_id=conversation_id, role=role, content=content, created_at=now
+        conversation_id=conversation_id,
+        role=role,
+        content=content,
+        meta=meta,
+        created_at=now,
     )
     db.add(msg)
     conv = db.get(Conversation, conversation_id)

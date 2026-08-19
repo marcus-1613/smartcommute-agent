@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     deepseek_model: str = "deepseek-chat"
 
     # 地图 / 路线
+    onemap_token: str = ""
+    onemap_routing_endpoint: str = (
+        "https://www.onemap.gov.sg/api/public/routingsvc/route"
+    )
     google_maps_api_key: str = ""
     google_maps_routes_endpoint: str = (
         "https://routes.googleapis.com/directions/v2:computeRoutes"
@@ -62,6 +66,10 @@ class Settings(BaseSettings):
     @property
     def google_maps_enabled(self) -> bool:
         return bool(self.google_maps_api_key)
+
+    @property
+    def onemap_enabled(self) -> bool:
+        return bool(self.onemap_token)
 
     @property
     def lta_enabled(self) -> bool:
