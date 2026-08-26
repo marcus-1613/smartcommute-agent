@@ -7,8 +7,9 @@
 
 数据源选择：
 - 路线（search_place / get_routes）：
-  - 有 GOOGLE_MAPS_API_KEY：Google Maps Routes API（真实路线）
-  - 无 Key：Mock 演示数据（明确标记 source=mock）
+  - 有 ONEMAP_TOKEN：OneMap Routing API（真实路线，官方免费）
+  - 否则有 GOOGLE_MAPS_API_KEY：Google Maps Routes API（真实路线）
+  - 否则：Mock 演示数据（明确标记 source=mock）
 - 交通事件（get_traffic_incidents）与路线解耦：
   - 有 LTA_ACCOUNT_KEY：LTA DataMall（真实事件）
   - 无 Key：Mock 演示事件（明确标记 source=mock）
@@ -34,6 +35,7 @@ except Exception:  # noqa: BLE001
 from mcp.server.fastmcp import FastMCP  # noqa: E402
 from shared.mock_mobility import MockMobilityService  # noqa: E402
 from shared.google_maps_service import GoogleMapsRoutesService  # noqa: E402
+from shared.onemap_service import OneMapRoutesService  # noqa: E402
 from shared.lta_service import LTATrafficService  # noqa: E402
 from shared.mobility_service import MobilityService  # noqa: E402
 
@@ -41,7 +43,10 @@ mcp = FastMCP("mobility")
 
 
 def _build_route_service() -> MobilityService:
-    """根据环境变量选择路线数据源（Google Maps 或 Mock）。"""
+    """根据环境变量选择路线数据源（OneMap → Google Maps → Mock）。"""
+    onemap_token = os.getenv("ONEMAP_TOKEN", "")
+    if onemap_token:
+        return OneMapRoutesService(token=onemap_token)
     api_key = os.getenv("GOOGLE_MAPS_API_KEY", "")
     if api_key:
         return GoogleMapsRoutesService(api_key=api_key)
