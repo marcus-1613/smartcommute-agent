@@ -68,7 +68,17 @@ export interface SessionSummary {
 export interface SessionDetail {
   session_id: string
   title: string
-  messages: { role: string; content: string; created_at: string }[]
+  messages: {
+    role: string
+    content: string
+    created_at: string
+    meta?: {
+      route_scores?: RouteScore[]
+      data_sources?: DataSources
+      source?: string
+      selected_route?: RouteScore | null
+    } | null
+  }[]
 }
 
 export interface CommuteSummary {
