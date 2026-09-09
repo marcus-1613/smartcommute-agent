@@ -36,6 +36,19 @@ async def test_summarize_all_live(agent):
 
 
 @pytest.mark.asyncio
+async def test_summarize_onemap_live(agent):
+    """OneMap 真实路线源应被正确归类为 live，而非 mock。"""
+    state = {
+        "route_results": {"source": "onemap", "status": "ok"},
+        "weather_result": {"source": "open_meteo", "status": "ok"},
+        "traffic_incidents": {"source": "lta_datamall", "status": "ok"},
+    }
+    s = agent._summarize_sources(state)
+    assert s["overall"] == "live"
+    assert s["routes"]["source"] == "onemap"
+
+
+@pytest.mark.asyncio
 async def test_summarize_mixed_degraded(agent):
     """混合来源（部分真实、部分模拟、部分失败）应标记为 degraded，而非 live。"""
     state = {
