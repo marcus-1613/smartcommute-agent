@@ -25,13 +25,22 @@
 1. 用户在前端输入自然语言 → `POST /api/chat`。
 2. 后端将消息交给 LangGraph 工作流，携带 `thread_id`（= session_id）与已累积的 `commute_request`。
 3. 工作流依次执行：
-   - **parse_request**：规则解析出发地、目的地、时间、偏好、硬约束。
+   - **parse_request**：优先 DeepSeek 解析出发地、目的地、时间、偏好、硬约束，失败降级规则解析。
+   - **detect_intent**：意图分流——通勤/交通问题继续路线链路；一般知识、问候、闲聊直接由 DeepSeek 生成文本回答并结束（避免因缺少出发地/目的地返回空白）。
    - **check_missing**：检查必要字段，缺失则进入澄清分支。
    - **query_data**：通过 MCP Client 并行调用 Mobility 与 Weather 工具。
-   - **normalize_data**：识别部分失败，收集错误。
+   - **normalize_data**：识别部分失败，汇总各数据源状态（`data_sources.overall`）。
    - **score**：确定性路线评分。
    - **generate_recommendation**：生成中文推荐 + 可解释理由。
 4. 结果写回业务数据库（会话、消息、通勤计划、路线、工具日志），并返回前端。
+
+### 意图分流设计
+
+- `detect_intent` 节点在 `parse_request` 之后**始终执行**（不做"有无通勤上下文"的短路跳过）。
+- `classify_intent` 把「已有通勤上下文」作为特征传给 DeepSeek 联合判断，从而正确区分：
+  - **上下文补充**（如"换一条少走路的路线"）→ `commute`，继续路线链路；
+  - **话题跳转**（如"agent 的概念是什么"）→ `general`，直接文本回答。
+- 仅当分类器本身异常、且已有通勤上下文时，才默认 `commute`（兜底，避免多轮补充被丢弃）。
 
 ## 3. MCP 设计
 
@@ -39,7 +48,7 @@
 - 每个工具返回统一结构：`status / data / source / queried_at / error`。
 - Windows 下子进程强制 UTF-8（`PYTHONUTF8=1`）以正确处理中文参数。
 - 数据源以适配器模式封装：`MobilityService` / `WeatherService` 抽象接口。
-  - Mobility 路线：`GoogleMapsRoutesService`（真实，需 `GOOGLE_MAPS_API_KEY`）、`MockMobilityService`（演示）。
+  - Mobility 路线：`OneMapRoutesService`（真实，首选，需 `ONEMAP_TOKEN`）、`GoogleMapsRoutesService`（真实，次选，需 `GOOGLE_MAPS_API_KEY`）、`MockMobilityService`（演示）；优先级 `OneMap → Google → Mock`。
   - 交通事件：`LTATrafficService`（真实，需 `LTA_ACCOUNT_KEY`，与路线解耦）、`MockMobilityService`（演示）。
   - 天气：`OpenMeteoWeatherService`（真实，免费无需 Key，默认启用）、`MockWeatherService`（演示）。
   - Server 启动时根据环境变量自动选择数据源。
@@ -65,8 +74,14 @@
 
 - `LLMService` 抽象接口，两个实现：`DeepSeekLLMService`（真实）、`MockLLMService`（降级）。
 - DeepSeek 通过 OpenAI 兼容接口调用，使用 `response_format=json_object` 做结构化需求解析。
+- 提供四类能力：
+  - `parse_commute`：结构化解析通勤需求字段。
+  - `classify_intent`：意图分类（`commute` / `general`），供 `detect_intent` 节点分流。
+  - `explain_recommendation`：生成推荐解释。
+  - `chat_free_text`：一般知识/问候/闲聊的自由问答（不限制通勤领域）。
 - `parse_request` 节点优先调用 LLM 解析，失败/未配置时降级为确定性规则解析。
 - `generate_recommendation` 节点优先调用 LLM 生成解释，失败时降级为模板。
+- 一般问答路径直接调用 `chat_free_text`，空内容/异常时返回明确降级提示，绝不静默返回空字符串。
 - 调用失败时明确标记 `source`，绝不把降级结果冒充真实模型输出。
 
 ## 5. 路线评分
@@ -108,4 +123,6 @@
 - 单点数据缺失（如天气失败）不影响路线推荐主体。
 - 无 API Key 时自动进入 Mock 模式，明确标记数据来源。
 - 模型调用失败时降级为规则/模板，并标记 `source`，不冒充真实结果。
-- 重试次数受控（`agent_max_retries`），避免无限循环。
+- 各节点独立捕获异常，失败维度记入 `state["errors"]` 后降级，不向上抛出、不阻断整体流程。
+- 当前**不实现失败重试**（原因见 [design-decisions.md](design-decisions.md) 决策 5）。
+  `config.agent_max_retries` 与 `state.retry_count` 是早期设计的遗留字段，尚未被任何逻辑使用。
