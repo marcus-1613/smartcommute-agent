@@ -1,0 +1,16 @@
+# 统一行尾处理：仓库内按文本规范化，避免在 Windows（core.autocrlf=true）
+# 与其他平台之间来回 checkout 时把整个仓库显示成已修改。
+* text=auto
+
+# Windows 批处理脚本必须保留 CRLF，否则可能无法执行
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# 二进制文件不做行尾转换与文本差异比较
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.ico  binary
+*.gif  binary
+*.woff binary
+*.woff2 binary
