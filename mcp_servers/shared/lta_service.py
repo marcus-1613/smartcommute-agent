@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from typing import Any, Dict, Optional
 
 import httpx
@@ -21,9 +22,18 @@ from shared.result import make_result
 
 logger = logging.getLogger(__name__)
 
+# 从 Message 中提取道路名：匹配 "on <道路名>" 后的道路缩写/名称。
+# 新加坡道路常见缩写：PIE、CTE、AYE、SLE、TPE、BKE、KPE、ECP、MCE 等，
+# 或完整道路名（如 "Bukit Timah Road"）。
+# 注意：缩写分支仅匹配全大写（避免误匹配 "Bukit" 等完整道路名开头）。
+_ROADNAME_RE = re.compile(
+    r"\bon\s+([A-Z]{2,4}|(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\s+Road))"
+)
+
 # LTA DataMall Traffic Incidents 端点（交通事件）
+# 注意：需使用 HTTPS（HTTP 已返回 301 重定向），路径无连字符。
 _TRAFFIC_INCIDENTS_ENDPOINT = (
-    "http://datamall2.mytransport.sg/ltaodataservice/TrafficIncidents"
+    "https://datamall2.mytransport.sg/ltaodataservice/TrafficIncidents"
 )
 
 
@@ -63,7 +73,10 @@ class LTATrafficService:
         }
         try:
             resp = httpx.get(
-                self.endpoint, headers=headers, timeout=self.timeout
+                self.endpoint,
+                headers=headers,
+                timeout=self.timeout,
+                follow_redirects=True,
             )
         except httpx.TimeoutException:
             logger.error("LTA 交通事件请求超时")
@@ -108,17 +121,30 @@ class LTATrafficService:
     def _convert_incidents(
         self, payload: Dict[str, Any], area: Optional[str]
     ) -> list:
-        """将 LTA 响应转换为统一交通事件模型。"""
-        raw = payload.get("value", [])
+        """将 LTA 响应转换为统一交通事件模型。
+
+        对非预期结构（value 缺失/非列表/含非 dict 元素）做容错，
+        不抛异常，返回空列表或可转换的部分。
+        """
+        raw = payload.get("value", []) if isinstance(payload, dict) else []
+        if not isinstance(raw, list):
+            return []
         incidents = []
-        for item in raw:
+        for idx, item in enumerate(raw):
+            if not isinstance(item, dict):
+                continue
+            message = item.get("Message") or item.get("Summary", "")
             incident = {
-                "id": item.get("IncidentID") or item.get("id"),
+                # LTA Traffic Incidents 无唯一 ID 字段，用索引生成稳定标识
+                "id": item.get("IncidentID") or item.get("id") or f"lta-{idx}",
                 "type": item.get("Type") or item.get("type"),
                 "line": None,
-                "description": item.get("Message") or item.get("Summary", ""),
+                "description": message,
                 "severity": self._map_severity(item.get("Type")),
                 "area": self._extract_area(item),
+                # LTA 提供经纬度，补充进结果（无则 None）
+                "latitude": item.get("Latitude"),
+                "longitude": item.get("Longitude"),
             }
             if area and area.lower() not in (incident["area"] or "").lower():
                 continue
@@ -127,15 +153,33 @@ class LTATrafficService:
 
     @staticmethod
     def _map_severity(incident_type: Optional[str]) -> str:
-        """将 LTA 事件类型粗略映射为严重程度。"""
+        """将 LTA 事件类型粗略映射为严重程度。
+
+        LTA Traffic Incidents 的 Type 实际取值（真实数据）：
+        - "Accident"（事故）→ high
+        - "Roadwork"（道路施工，注意是一个词）、"Vehicle Breakdown" → medium
+        - "Heavy Traffic" 等 → low
+        """
         t = (incident_type or "").lower()
-        if "accident" in t or "accident" in t:
+        if "accident" in t:
             return "high"
-        if "roadworks" in t or "road work" in t or "vehicle breakdown" in t:
+        if "roadwork" in t or "road work" in t or "vehicle breakdown" in t:
             return "medium"
         return "low"
 
     @staticmethod
     def _extract_area(item: Dict[str, Any]) -> str:
-        """尽量提取区域/道路名，缺省为空字符串。"""
-        return item.get("RoadName") or item.get("Location") or ""
+        """尽量提取区域/道路名，缺省为空字符串。
+
+        LTA Traffic Incidents 无独立区域字段，道路名在 Message 文本中
+        （如 "Heavy Traffic on PIE (towards Tuas) ..."），用正则提取。
+        """
+        if not isinstance(item, dict):
+            return ""
+        area = item.get("RoadName") or item.get("Location")
+        if area:
+            return area
+        # 从 Message 中提取 "on X" 后的道路名
+        message = item.get("Message") or ""
+        m = _ROADNAME_RE.search(message)
+        return m.group(1) if m else ""
