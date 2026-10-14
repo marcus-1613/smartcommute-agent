@@ -70,11 +70,22 @@ def test_google_maps_timeout(monkeypatch):
 
 
 def test_google_maps_http_error(monkeypatch):
-    """HTTP 错误响应应返回明确错误。"""
+    """HTTP 错误响应应返回明确错误（不依赖外网，用 monkeypatch 模拟）。"""
+    import httpx
+
     svc = GoogleMapsRoutesService(api_key="test-key")
-    svc.endpoint = "https://httpbin.org/status/401"
+    svc.endpoint = "https://example.invalid/computeRoutes"
+
+    class _FakeResp:
+        status_code = 401
+
+        def json(self):
+            return {}
+
+    monkeypatch.setattr(httpx, "post", lambda *a, **k: _FakeResp())
     r = svc.get_routes("裕廊东", "滨海湾", "transit")
     assert r["status"] == "error"
+    assert "401" in r["error"]
 
 
 def test_google_maps_traffic_empty():

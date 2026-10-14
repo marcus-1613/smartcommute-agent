@@ -61,3 +61,29 @@ def test_deepseek_explain_graceful_failure(monkeypatch):
     svc = DeepSeekLLMService(api_key="invalid-key", base_url="http://127.0.0.1:1", timeout=1.0)
     r = svc.explain_recommendation({"top_route": {}})
     assert r["ok"] is False
+
+
+def test_mock_chat_free_text_returns_not_ok():
+    svc = MockLLMService()
+    r = svc.chat_free_text("什么是 LangGraph？")
+    assert r["ok"] is False
+    assert r["source"] == "mock"
+
+
+def test_mock_classify_intent_defaults_commute():
+    svc = MockLLMService()
+    r = svc.classify_intent("你好")
+    assert r["intent"] == "commute"
+
+
+def test_deepseek_chat_free_text_graceful_failure():
+    svc = DeepSeekLLMService(api_key="invalid-key", base_url="http://127.0.0.1:1", timeout=1.0)
+    r = svc.chat_free_text("什么是 LangGraph？")
+    assert r["ok"] is False
+    assert r["text"] == ""
+
+
+def test_deepseek_classify_intent_graceful_failure():
+    svc = DeepSeekLLMService(api_key="invalid-key", base_url="http://127.0.0.1:1", timeout=1.0)
+    r = svc.classify_intent("你好")
+    assert r["intent"] == "commute"  # 失败默认走通勤，不阻断

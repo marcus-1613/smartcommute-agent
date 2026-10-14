@@ -9,6 +9,11 @@ os.environ.setdefault("GOOGLE_MAPS_API_KEY", "")
 os.environ.setdefault("LTA_ACCOUNT_KEY", "")
 os.environ.setdefault("DEEPSEEK_API_KEY", "")
 
+# 测试使用独立数据库，避免污染项目根目录的演示数据（smartcommute.db）。
+# 必须用 setdefault + 显式赋值：pydantic-settings 会读取 .env，但真实环境变量优先级更高。
+os.environ["DATABASE_URL"] = "sqlite:///./test_smartcommute.db"
+os.environ.setdefault("SMARTCOMMUTE_CHECKPOINT_PATH", "./test_smartcommute.checkpoint.sqlite")
+
 # 将 backend 目录加入路径，便于导入 app 包
 BACKEND_DIR = os.path.abspath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "backend")
