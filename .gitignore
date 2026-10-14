@@ -1,0 +1,53 @@
+# 环境与密钥
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# 数据库
+*.db
+*.sqlite
+*.sqlite3
+
+# Node / 前端
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.timestamp-*.mjs
+
+# 构建与日志
+dist/
+build/
+*.log
+logs/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# LangGraph checkpointer 持久化
+.checkpoint/
+checkpoint.sqlite
+
+# 个人/工作区数据（.workbuddy 为项目本地数据，非源码）
+.workbuddy/
+
+# 本地数据库运行时文件
+smartcommute.db
+smartcommute.checkpoint.sqlite
