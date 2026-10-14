@@ -53,10 +53,14 @@ export default function HistoryPage() {
       {!loading && tab === 'sessions' && (
         <div className="list">
           {sessions.length === 0 && (
-            <p className="hint">暂无历史会话，去通勤助手发起一次对话吧。</p>
+            <div className="empty-state">
+              <span className="empty-state-icon">💬</span>
+              <p>暂无历史会话，去通勤助手发起一次对话吧。</p>
+            </div>
           )}
           {sessions.map((s) => (
             <div key={s.session_id} className="list-item">
+              <div className="list-item-icon list-item-icon-session">💬</div>
               <div className="list-item-main">
                 <strong>{s.title}</strong>
                 <span className="muted">
@@ -71,13 +75,17 @@ export default function HistoryPage() {
       {!loading && tab === 'commutes' && (
         <div className="list">
           {commutes.length === 0 && (
-            <p className="hint">暂无通勤计划记录。</p>
+            <div className="empty-state">
+              <span className="empty-state-icon">🧭</span>
+              <p>暂无通勤计划记录。</p>
+            </div>
           )}
           {commutes.map((c) => (
             <div key={c.id} className="list-item">
+              <div className="list-item-icon list-item-icon-commute">🧭</div>
               <div className="list-item-main">
-                <strong>
-                  {c.origin} → {c.destination}
+                <strong className="commute-route">
+                  {c.origin} <span className="arrow">→</span> {c.destination}
                 </strong>
                 <span className="muted">
                   {c.departure_time || '时间未指定'} · {c.mode} ·{' '}
@@ -85,6 +93,9 @@ export default function HistoryPage() {
                   {formatTime(c.created_at)}
                 </span>
               </div>
+              <span className={`data-pill ${c.source === 'mock' ? 'pill-mock' : 'pill-live'}`}>
+                {c.source === 'mock' ? '模拟' : '实时'}
+              </span>
             </div>
           ))}
         </div>

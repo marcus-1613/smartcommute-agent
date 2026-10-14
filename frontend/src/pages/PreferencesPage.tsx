@@ -59,95 +59,105 @@ export default function PreferencesPage() {
     <div className="page">
       <h1>用户偏好</h1>
       <div className="pref-card">
-        <div className="pref-group">
-          <label>默认交通方式</label>
-          <select
-            value={prefs.default_mode}
-            onChange={(e) => update('default_mode', e.target.value)}
-          >
-            <option value="transit">公共交通</option>
-            <option value="driving">驾车</option>
-          </select>
+        <div className="pref-section">
+          <h2 className="pref-section-title">🚇 出行方式</h2>
+          <div className="pref-group">
+            <label>默认交通方式</label>
+            <select
+              value={prefs.default_mode}
+              onChange={(e) => update('default_mode', e.target.value)}
+            >
+              <option value="transit">公共交通</option>
+              <option value="driving">驾车</option>
+            </select>
+          </div>
         </div>
 
-        <div className="pref-group">
-          <label>换乘倾向（越大越偏好少换乘）</label>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.1}
-            value={prefs.prefer_fewer_transfers}
-            onChange={(e) =>
-              update('prefer_fewer_transfers', Number(e.target.value))
-            }
-          />
-          <span className="range-val">{prefs.prefer_fewer_transfers.toFixed(1)}</span>
+        <div className="pref-section">
+          <h2 className="pref-section-title">⚖️ 偏好权重</h2>
+          <div className="pref-group">
+            <label>换乘倾向（越大越偏好少换乘）</label>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.1}
+              value={prefs.prefer_fewer_transfers}
+              onChange={(e) =>
+                update('prefer_fewer_transfers', Number(e.target.value))
+              }
+            />
+            <span className="range-val">{prefs.prefer_fewer_transfers.toFixed(1)}</span>
+          </div>
+
+          <div className="pref-group">
+            <label>步行倾向（越大越偏好少走路）</label>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.1}
+              value={prefs.prefer_less_walking}
+              onChange={(e) =>
+                update('prefer_less_walking', Number(e.target.value))
+              }
+            />
+            <span className="range-val">{prefs.prefer_less_walking.toFixed(1)}</span>
+          </div>
+
+          <div className="pref-group">
+            <label>费用倾向（越大越偏好低费用）</label>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.1}
+              value={prefs.prefer_lower_cost}
+              onChange={(e) =>
+                update('prefer_lower_cost', Number(e.target.value))
+              }
+            />
+            <span className="range-val">{prefs.prefer_lower_cost.toFixed(1)}</span>
+          </div>
+
+          <div className="pref-group">
+            <label>耗时倾向（越大越偏好短耗时）</label>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.1}
+              value={prefs.prefer_shorter_time}
+              onChange={(e) =>
+                update('prefer_shorter_time', Number(e.target.value))
+              }
+            />
+            <span className="range-val">{prefs.prefer_shorter_time.toFixed(1)}</span>
+          </div>
         </div>
 
-        <div className="pref-group">
-          <label>步行倾向（越大越偏好少走路）</label>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.1}
-            value={prefs.prefer_less_walking}
-            onChange={(e) =>
-              update('prefer_less_walking', Number(e.target.value))
-            }
-          />
-          <span className="range-val">{prefs.prefer_less_walking.toFixed(1)}</span>
-        </div>
-
-        <div className="pref-group">
-          <label>费用倾向（越大越偏好低费用）</label>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.1}
-            value={prefs.prefer_lower_cost}
-            onChange={(e) =>
-              update('prefer_lower_cost', Number(e.target.value))
-            }
-          />
-          <span className="range-val">{prefs.prefer_lower_cost.toFixed(1)}</span>
-        </div>
-
-        <div className="pref-group">
-          <label>耗时倾向（越大越偏好短耗时）</label>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.1}
-            value={prefs.prefer_shorter_time}
-            onChange={(e) =>
-              update('prefer_shorter_time', Number(e.target.value))
-            }
-          />
-          <span className="range-val">{prefs.prefer_shorter_time.toFixed(1)}</span>
-        </div>
-
-        <div className="pref-group">
-          <label>最大步行距离（米）</label>
-          <input
-            type="number"
-            min={0}
-            value={prefs.max_walk_m}
-            onChange={(e) => update('max_walk_m', Number(e.target.value))}
-          />
-        </div>
-
-        <div className="pref-group">
-          <label>最大换乘次数</label>
-          <input
-            type="number"
-            min={0}
-            value={prefs.max_transfers}
-            onChange={(e) => update('max_transfers', Number(e.target.value))}
-          />
+        <div className="pref-section">
+          <h2 className="pref-section-title">🛡️ 硬约束</h2>
+          <div className="pref-row">
+            <div className="pref-group pref-group-inline">
+              <label>最大步行距离（米）</label>
+              <input
+                type="number"
+                min={0}
+                value={prefs.max_walk_m}
+                onChange={(e) => update('max_walk_m', Number(e.target.value))}
+              />
+            </div>
+            <div className="pref-group pref-group-inline">
+              <label>最大换乘次数</label>
+              <input
+                type="number"
+                min={0}
+                value={prefs.max_transfers}
+                onChange={(e) => update('max_transfers', Number(e.target.value))}
+              />
+            </div>
+          </div>
         </div>
 
         {msg && <div className="success-banner">{msg}</div>}
