@@ -8,7 +8,6 @@
 ![MCP](https://img.shields.io/badge/MCP-FastMCP-6E56CF)
 ![React](https://img.shields.io/badge/React-18-61DAFB)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6)
-![Tests](https://img.shields.io/badge/tests-108%20passed-brightgreen)
 
 ![通勤推荐结果](docs/images/02-route-recommendation.png)
 
