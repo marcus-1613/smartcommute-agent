@@ -28,6 +28,21 @@ class LLMService:
         """生成推荐解释。返回 dict，含 text 与 source。"""
         raise NotImplementedError
 
+    def chat_free_text(self, user_input: str) -> Dict[str, Any]:
+        """通用自由问答：不限定通勤领域，直接生成文本回答。
+
+        用于非通勤意图（一般知识、问候、闲聊等）的直接回答。
+        返回 dict，含 text 与 source；失败时 text 为空且 ok=False。
+        """
+        raise NotImplementedError
+
+    def classify_intent(self, user_input: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """判断用户输入是否为通勤/交通意图。
+
+        返回 dict，含 intent（"commute" | "general"）与 source；失败时默认 commute（走原流程）。
+        """
+        raise NotImplementedError
+
 
 class DeepSeekLLMService(LLMService):
     """基于 DeepSeek 的真实 LLM 实现。"""
@@ -136,6 +151,57 @@ class DeepSeekLLMService(LLMService):
             logger.warning("DeepSeek 解释生成失败：%s", exc)
             return {"ok": False, "text": "", "source": "mock", "error": str(exc)}
 
+    def chat_free_text(self, user_input: str) -> Dict[str, Any]:
+        """通用自由问答：不限定通勤领域，直接回答用户问题。"""
+        prompt = (
+            "你是一个友好、专业的 AI 助手。请直接、简洁地回答用户的问题。\n"
+            "用户问题：" + user_input + "\n"
+            "请用中文回答。"
+        )
+        try:
+            text = self._chat_text([{"role": "user", "content": prompt}], max_tokens=800)
+            if not text:
+                return {"ok": False, "text": "", "source": self.source_name, "error": "模型返回空内容"}
+            return {"ok": True, "text": text, "source": self.source_name, "error": ""}
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("DeepSeek 通用问答失败：%s", exc)
+            return {"ok": False, "text": "", "source": self.source_name, "error": str(exc)}
+
+    def classify_intent(self, user_input: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """判断输入是否为通勤/交通意图。失败时默认 commute（走原流程，不阻断）。
+
+        context 为当前已累积的通勤上下文（origin/destination 等），
+        用于在多轮对话中区分「路线调整/补充」（commute）与「话题跳转」（general）。
+        """
+        ctx_line = ""
+        if context and (context.get("origin") or context.get("destination")):
+            ctx_line = (
+                "当前对话已有通勤上下文（出发地/目的地等）："
+                + json.dumps(context, ensure_ascii=False)
+                + "\n"
+            )
+        prompt = (
+            "判断下面这句话的意图。\n"
+            + ctx_line
+            + "如果这句话是在询问或调整「通勤/交通出行」相关事项（问路、规划路线、查询交通方式、"
+            "天气对出行的影响、交通路况、地铁公交、调整路线/偏好等），输出 {\"intent\": \"commute\"}。\n"
+            "如果这句话是普通知识、概念解释、问候、闲聊或与出行无关的其他话题（即使前面聊过通勤），"
+            "输出 {\"intent\": \"general\"}。\n"
+            "只输出 JSON。\n"
+            "用户输入：" + user_input
+        )
+        try:
+            data = self._chat_json(
+                [{"role": "user", "content": prompt}], max_tokens=50
+            )
+            intent = (data or {}).get("intent", "commute")
+            if intent not in ("commute", "general"):
+                intent = "commute"
+            return {"intent": intent, "source": self.source_name, "error": ""}
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("DeepSeek 意图识别失败，默认按通勤处理：%s", exc)
+            return {"intent": "commute", "source": self.source_name, "error": str(exc)}
+
 
 class MockLLMService(LLMService):
     """降级实现：不调用任何模型，返回空结果，交由规则层处理。"""
@@ -147,6 +213,13 @@ class MockLLMService(LLMService):
 
     def explain_recommendation(self, context: Dict[str, Any]) -> Dict[str, Any]:
         return {"ok": False, "text": "", "source": "mock", "error": "未配置 DeepSeek"}
+
+    def chat_free_text(self, user_input: str) -> Dict[str, Any]:
+        return {"ok": False, "text": "", "source": "mock", "error": "未配置 DeepSeek"}
+
+    def classify_intent(self, user_input: str, context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        # Mock 无法判断意图，默认按通勤处理（走原流程），避免测试行为漂移
+        return {"intent": "commute", "source": "mock", "error": "未配置 DeepSeek"}
 
 
 def build_llm_service() -> LLMService:

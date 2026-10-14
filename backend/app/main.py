@@ -24,8 +24,13 @@ async def lifespan(app: FastAPI):
         logging.warning(
             "未配置 DEEPSEEK_API_KEY，Agent 将使用规则解析（不影响 Mock 演示）"
         )
-    if not settings.google_maps_enabled:
-        logging.info("未配置 GOOGLE_MAPS_API_KEY，路线将使用 Mock 数据")
+    # 路线数据源：OneMap → Google Maps → Mock
+    if settings.onemap_enabled:
+        logging.info("已配置 ONEMAP_TOKEN，路线使用 OneMap 真实数据")
+    elif settings.google_maps_enabled:
+        logging.info("已配置 GOOGLE_MAPS_API_KEY，路线使用 Google Maps 真实数据")
+    else:
+        logging.info("未配置 ONEMAP_TOKEN / GOOGLE_MAPS_API_KEY，路线使用 Mock 数据")
     yield
     # 关闭 Checkpointer 连接，保证优雅退出
     await chat.shutdown_agent()
@@ -53,8 +58,18 @@ def health():
     return {
         "status": "ok",
         "app": "SmartCommute AI",
-        "mock_mode": not (settings.google_maps_enabled or settings.weather_enabled),
+        # mock_mode 表示「是否整体处于 Mock 演示模式」：
+        # 仅当路线（OneMap/Google Maps）与天气都未启用真实源时才为 True。
+        "mock_mode": not (
+            settings.onemap_enabled
+            or settings.google_maps_enabled
+            or settings.weather_enabled
+        ),
         "deepseek_enabled": settings.deepseek_enabled,
+        "onemap_enabled": settings.onemap_enabled,
+        "google_maps_enabled": settings.google_maps_enabled,
+        "lta_enabled": settings.lta_enabled,
+        "weather_enabled": settings.weather_enabled,
     }
 
 

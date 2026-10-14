@@ -27,6 +27,9 @@ class AgentState(TypedDict, total=False):
     # 解析后的通勤需求
     commute_request: CommuteRequest
 
+    # 用户意图：commute（通勤/交通）| general（一般问题）
+    intent: str
+
     # 缺失字段列表
     missing_fields: List[str]
 

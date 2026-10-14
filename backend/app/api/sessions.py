@@ -34,7 +34,12 @@ def get_session(session_id: str, db: Session = Depends(get_db)):
     if conv is None:
         raise HTTPException(status_code=404, detail="会话不存在")
     messages = [
-        {"role": m.role, "content": m.content, "created_at": m.created_at.isoformat()}
+        {
+            "role": m.role,
+            "content": m.content,
+            "meta": m.meta,
+            "created_at": m.created_at.isoformat(),
+        }
         for m in conv.messages
     ]
     return SessionDetail(
